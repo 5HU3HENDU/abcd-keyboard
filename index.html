@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABCD Keyboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    background: #f4f1ea;
+    color: #1c1a17;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 48px;
+    min-height: 100vh;
+  }
+  .wrap { width: min(94vw, 640px); }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .topbar h1 { font-size: 20px; font-weight: 700; }
+  .sound-btn {
+    border: 1px solid #ddd6c6;
+    background: #fffdf8;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .sound-btn:hover { border-color: #1c1a17; }
+  #box {
+    width: 100%;
+    min-height: 150px;
+    resize: vertical;
+    border: 1px solid #ddd6c6;
+    border-radius: 16px;
+    background: #fffdf8;
+    padding: 18px;
+    font-size: 22px;
+    line-height: 1.5;
+    font-family: inherit;
+    color: #1c1a17;
+    outline: none;
+  }
+  #box:focus { border-color: #1c1a17; }
+  .hint {
+    margin: 10px 4px 20px;
+    font-size: 13px;
+    color: #8a857a;
+  }
+  .count {
+    text-align: right;
+    font-size: 12px;
+    color: #8a857a;
+    margin: -12px 4px 20px;
+  }
+  .keyboard {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+  .key {
+    flex: 1 1 0;
+    max-width: 62px;
+    height: 56px;
+    border: 1px solid #ddd6c6;
+    border-radius: 12px;
+    background: #fffdf8;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1c1a17;
+    cursor: pointer;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.06);
+    transition: transform 0.05s ease, background 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .key:active, .key.pressed {
+    transform: translateY(2px) scale(0.97);
+    background: #efe9da;
+    box-shadow: none;
+  }
+  .key.wide { flex: 2 1 0; max-width: none; font-size: 16px; }
+  .key.space { flex: 5 1 0; max-width: none; }
+  .key.action { background: #1c1a17; color: #fdfbf6; border-color: #1c1a17; }
+  .key.action:active { background: #3a3733; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>ABCD Keyboard</h1>
+    <button type="button" class="sound-btn" id="soundBtn" aria-pressed="true">🔊 Sound On</button>
+  </div>
+
+  <textarea id="box" readonly rows="5" placeholder="Tap the letters below to type…"></textarea>
+  <p class="count" id="count">0 characters</p>
+  <p class="hint">Letters are in A–Z order, not QWERTY. Tap a key to feel the difference — your fingers have to travel somewhere new.</p>
+
+  <div class="keyboard" id="keyboard" aria-label="ABCD keyboard"></div>
+</div>
+
+<script>
+(function () {
+  var box = document.getElementById("box");
+  var countEl = document.getElementById("count");
+  var keyboardEl = document.getElementById("keyboard");
+  var soundBtn = document.getElementById("soundBtn");
+
+  /* Sound: on/off, remembered on this device. */
+  var soundOn = true;
+  try {
+    var saved = localStorage.getItem("abcdKeyboardSound");
+    if (saved !== null) soundOn = saved === "on";
+  } catch (e) {}
+
+  function syncSoundBtn() {
+    soundBtn.textContent = soundOn ? "🔊 Sound On" : "🔇 Sound Off";
+    soundBtn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+  }
+  soundBtn.addEventListener("click", function () {
+    soundOn = !soundOn;
+    try { localStorage.setItem("abcdKeyboardSound", soundOn ? "on" : "off"); } catch (e) {}
+    syncSoundBtn();
+    if (soundOn) playClick(false);
+  });
+
+  /* Tiny mechanical click, generated in the browser — no audio files needed. */
+  var audioCtx = null;
+  function playClick(low) {
+    if (!soundOn) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var t = audioCtx.currentTime;
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(low ? 700 : 1400, t);
+      osc.frequency.exponentialRampToValueAtTime(low ? 400 : 800, t + 0.03);
+      gain.gain.setValueAtTime(0.08, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.06);
+    } catch (e) { /* audio unavailable — typing still works */ }
+  }
+
+  function updateCount() {
+    var n = box.value.length;
+    countEl.textContent = n + (n === 1 ? " character" : " characters");
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function insertText(text) {
+    box.value += text;
+    playClick(false);
+    updateCount();
+  }
+  function backspace() {
+    box.value = box.value.slice(0, -1);
+    playClick(true);
+    updateCount();
+  }
+  function clearAll() {
+    box.value = "";
+    playClick(true);
+    updateCount();
+  }
+
+  function makeKey(label, action, cls) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "key" + (cls ? " " + cls : "");
+    b.textContent = label;
+    b.addEventListener("click", function () {
+      b.classList.add("pressed");
+      setTimeout(function () { b.classList.remove("pressed"); }, 120);
+      action();
+    });
+    return b;
+  }
+
+  /* Alphabetical rows: A–J, K–S, T–Z. */
+  var rows = ["ABCDEFGHIJ", "KLMNOPQRS", "TUVWXYZ"];
+  rows.forEach(function (letters, ri) {
+    var row = document.createElement("div");
+    row.className = "row";
+    letters.split("").forEach(function (ch) {
+      row.appendChild(makeKey(ch, function () { insertText(ch); }));
+    });
+    if (ri === 2) {
+      row.appendChild(makeKey("⌫", backspace, "wide action"));
+    }
+    keyboardEl.appendChild(row);
+  });
+  var bottom = document.createElement("div");
+  bottom.className = "row";
+  bottom.appendChild(makeKey("Clear", clearAll, "wide"));
+  bottom.appendChild(makeKey("Space", function () { insertText(" "); }, "space"));
+  bottom.appendChild(makeKey("⏎ Enter", function () { insertText("\n"); }, "wide action"));
+  keyboardEl.appendChild(bottom);
+
+  /* Your physical keyboard works too — same sound, same box. */
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "Backspace") { e.preventDefault(); backspace(); }
+    else if (e.key === "Enter") { e.preventDefault(); insertText("\n"); }
+    else if (/^[a-zA-Z]$/.test(e.key)) { insertText(e.key.toUpperCase()); }
+    else if (e.key === " ") { e.preventDefault(); insertText(" "); }
+  });
+
+  syncSoundBtn();
+  updateCount();
+})();
+</script>
+</body>
+</html>
